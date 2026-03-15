@@ -1,0 +1,157 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.betademands.mapper.ProblemTicketMetricMapper">
+
+    <resultMap id="ProblemTicketMetricResultMap" type="com.example.betademands.entity.ProblemTicketMetric">
+        <id column="ticket_id" property="ticketId"/>
+        <result column="submit_time" property="submitTime"/>
+        <result column="current_status" property="currentStatus"/>
+        <result column="current_stage_entered_at" property="currentStageEnteredAt"/>
+        <result column="analysis_duration_sec" property="analysisDurationSec"/>
+        <result column="analysis_completed" property="analysisCompleted"/>
+        <result column="modify_duration_sec" property="modifyDurationSec"/>
+        <result column="modify_eligible" property="modifyEligible"/>
+        <result column="push_duration_sec" property="pushDurationSec"/>
+        <result column="push_eligible" property="pushEligible"/>
+        <result column="closed_loop_duration_sec" property="closedLoopDurationSec"/>
+        <result column="closed_loop_completed" property="closedLoopCompleted"/>
+        <result column="trace_complete" property="traceComplete"/>
+        <result column="updated_at" property="updatedAt"/>
+    </resultMap>
+
+    <resultMap id="DashboardMetricsAggregateResultMap" type="com.example.betademands.entity.DashboardMetricsAggregate">
+        <result column="analysis_avg_duration_sec" property="analysisAvgDurationSec"/>
+        <result column="analysis_sample_count" property="analysisSampleCount"/>
+        <result column="modify_avg_duration_sec" property="modifyAvgDurationSec"/>
+        <result column="modify_sample_count" property="modifySampleCount"/>
+        <result column="push_avg_duration_sec" property="pushAvgDurationSec"/>
+        <result column="push_sample_count" property="pushSampleCount"/>
+        <result column="closed_loop_avg_duration_sec" property="closedLoopAvgDurationSec"/>
+        <result column="closed_loop_sample_count" property="closedLoopSampleCount"/>
+    </resultMap>
+
+    <sql id="ProblemTicketMetricBaseColumns">
+        ticket_id,
+        submit_time,
+        current_status,
+        current_stage_entered_at,
+        analysis_duration_sec,
+        analysis_completed,
+        modify_duration_sec,
+        modify_eligible,
+        push_duration_sec,
+        push_eligible,
+        closed_loop_duration_sec,
+        closed_loop_completed,
+        trace_complete,
+        updated_at
+    </sql>
+
+    <insert id="insert" parameterType="com.example.betademands.entity.ProblemTicketMetric">
+        INSERT INTO problem_ticket_metric (
+            ticket_id,
+            submit_time,
+            current_status,
+            current_stage_entered_at,
+            analysis_duration_sec,
+            analysis_completed,
+            modify_duration_sec,
+            modify_eligible,
+            push_duration_sec,
+            push_eligible,
+            closed_loop_duration_sec,
+            closed_loop_completed,
+            trace_complete,
+            updated_at
+        ) VALUES (
+            #{ticketId},
+            #{submitTime},
+            #{currentStatus},
+            #{currentStageEnteredAt},
+            #{analysisDurationSec},
+            #{analysisCompleted},
+            #{modifyDurationSec},
+            #{modifyEligible},
+            #{pushDurationSec},
+            #{pushEligible},
+            #{closedLoopDurationSec},
+            #{closedLoopCompleted},
+            #{traceComplete},
+            #{updatedAt}
+        )
+    </insert>
+
+    <select id="selectByTicketId" resultMap="ProblemTicketMetricResultMap">
+        SELECT
+        <include refid="ProblemTicketMetricBaseColumns"/>
+        FROM problem_ticket_metric
+        WHERE ticket_id = #{ticketId}
+    </select>
+
+    <select id="selectByTicketIdForUpdate" resultMap="ProblemTicketMetricResultMap">
+        SELECT
+        <include refid="ProblemTicketMetricBaseColumns"/>
+        FROM problem_ticket_metric
+        WHERE ticket_id = #{ticketId}
+        FOR UPDATE
+    </select>
+
+    <update id="update" parameterType="com.example.betademands.entity.ProblemTicketMetric">
+        UPDATE problem_ticket_metric
+        SET current_status = #{currentStatus},
+            current_stage_entered_at = #{currentStageEnteredAt},
+            analysis_duration_sec = #{analysisDurationSec},
+            analysis_completed = #{analysisCompleted},
+            modify_duration_sec = #{modifyDurationSec},
+            modify_eligible = #{modifyEligible},
+            push_duration_sec = #{pushDurationSec},
+            push_eligible = #{pushEligible},
+            closed_loop_duration_sec = #{closedLoopDurationSec},
+            closed_loop_completed = #{closedLoopCompleted},
+            trace_complete = #{traceComplete},
+            updated_at = #{updatedAt}
+        WHERE ticket_id = #{ticketId}
+    </update>
+
+    <delete id="deleteByTicketIds">
+        DELETE FROM problem_ticket_metric
+        WHERE ticket_id IN
+        <foreach collection="ids" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </delete>
+
+    <select id="aggregateDashboardMetrics" resultMap="DashboardMetricsAggregateResultMap">
+        SELECT
+            COALESCE(CAST(ROUND(AVG(CASE
+                WHEN m.analysis_completed = TRUE AND m.trace_complete = TRUE THEN m.analysis_duration_sec
+            END), 0) AS BIGINT), 0) AS analysis_avg_duration_sec,
+            COALESCE(SUM(CASE
+                WHEN m.analysis_completed = TRUE AND m.trace_complete = TRUE THEN 1 ELSE 0
+            END), 0) AS analysis_sample_count,
+            COALESCE(CAST(ROUND(AVG(CASE
+                WHEN m.modify_eligible = TRUE AND m.trace_complete = TRUE THEN m.modify_duration_sec
+            END), 0) AS BIGINT), 0) AS modify_avg_duration_sec,
+            COALESCE(SUM(CASE
+                WHEN m.modify_eligible = TRUE AND m.trace_complete = TRUE THEN 1 ELSE 0
+            END), 0) AS modify_sample_count,
+            COALESCE(CAST(ROUND(AVG(CASE
+                WHEN m.push_eligible = TRUE AND m.trace_complete = TRUE THEN m.push_duration_sec
+            END), 0) AS BIGINT), 0) AS push_avg_duration_sec,
+            COALESCE(SUM(CASE
+                WHEN m.push_eligible = TRUE AND m.trace_complete = TRUE THEN 1 ELSE 0
+            END), 0) AS push_sample_count,
+            COALESCE(CAST(ROUND(AVG(CASE
+                WHEN m.closed_loop_completed = TRUE AND m.trace_complete = TRUE THEN m.closed_loop_duration_sec
+            END), 0) AS BIGINT), 0) AS closed_loop_avg_duration_sec,
+            COALESCE(SUM(CASE
+                WHEN m.closed_loop_completed = TRUE AND m.trace_complete = TRUE THEN 1 ELSE 0
+            END), 0) AS closed_loop_sample_count
+        FROM problem_ticket_metric m
+        INNER JOIN problem_ticket t ON t.id = m.ticket_id
+        WHERE t.deleted = FALSE
+    </select>
+
+</mapper>

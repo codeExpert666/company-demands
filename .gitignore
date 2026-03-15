@@ -1,0 +1,21 @@
+# Maven / Java build output
+target/
+*.class
+*.log
+
+# Local dependency caches / temp files
+.m2/
+.jar-list.txt
+
+# IDE files
+.idea/
+*.iml
+.vscode/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Environment overrides
+.env
+.env.*

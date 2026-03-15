@@ -1,0 +1,128 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.betademands.mapper.ProblemTicketMapper">
+
+    <resultMap id="ProblemTicketResultMap" type="com.example.betademands.entity.ProblemTicket">
+        <id column="id" property="id"/>
+        <result column="ticket_no" property="ticketNo"/>
+        <result column="description" property="description"/>
+        <result column="submit_time" property="submitTime"/>
+        <result column="status" property="status"/>
+        <result column="status_changed_at" property="statusChangedAt"/>
+        <result column="deleted" property="deleted"/>
+        <result column="created_at" property="createdAt"/>
+        <result column="updated_at" property="updatedAt"/>
+    </resultMap>
+
+    <sql id="ProblemTicketBaseColumns">
+        id,
+        ticket_no,
+        description,
+        submit_time,
+        status,
+        status_changed_at,
+        deleted,
+        created_at,
+        updated_at
+    </sql>
+
+    <insert id="insert" parameterType="com.example.betademands.entity.ProblemTicket"
+            useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO problem_ticket (
+            ticket_no,
+            description,
+            submit_time,
+            status,
+            status_changed_at,
+            deleted,
+            created_at,
+            updated_at
+        ) VALUES (
+            #{ticketNo},
+            #{description},
+            #{submitTime},
+            #{status},
+            #{statusChangedAt},
+            #{deleted},
+            #{createdAt},
+            #{updatedAt}
+        )
+    </insert>
+
+    <select id="selectActiveById" resultMap="ProblemTicketResultMap">
+        SELECT
+        <include refid="ProblemTicketBaseColumns"/>
+        FROM problem_ticket
+        WHERE id = #{id}
+          AND deleted = FALSE
+    </select>
+
+    <select id="selectActiveByIdForUpdate" resultMap="ProblemTicketResultMap">
+        SELECT
+        <include refid="ProblemTicketBaseColumns"/>
+        FROM problem_ticket
+        WHERE id = #{id}
+          AND deleted = FALSE
+        FOR UPDATE
+    </select>
+
+    <update id="updateSelective" parameterType="com.example.betademands.entity.ProblemTicket">
+        UPDATE problem_ticket
+        <set>
+            <if test="ticketNo != null">ticket_no = #{ticketNo},</if>
+            <if test="description != null">description = #{description},</if>
+            <if test="status != null">status = #{status},</if>
+            <if test="statusChangedAt != null">status_changed_at = #{statusChangedAt},</if>
+            updated_at = #{updatedAt}
+        </set>
+        WHERE id = #{id}
+          AND deleted = FALSE
+    </update>
+
+    <delete id="deleteByIds">
+        DELETE FROM problem_ticket
+        WHERE id IN
+        <foreach collection="ids" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </delete>
+
+    <select id="selectWithoutMetrics" resultMap="ProblemTicketResultMap">
+        SELECT
+        <include refid="ProblemTicketBaseColumns"/>
+        FROM problem_ticket
+        WHERE deleted = FALSE
+          AND id NOT IN (SELECT ticket_id FROM problem_ticket_metric)
+        ORDER BY id
+    </select>
+
+    <select id="selectAllActive" resultMap="ProblemTicketResultMap">
+        SELECT
+        <include refid="ProblemTicketBaseColumns"/>
+        FROM problem_ticket
+        WHERE deleted = FALSE
+        ORDER BY id
+    </select>
+
+    <select id="countActiveByIds" resultType="long">
+        SELECT COUNT(1)
+        FROM problem_ticket
+        WHERE id IN
+        <foreach collection="ids" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+          AND deleted = FALSE
+    </select>
+
+    <update id="updateStatus">
+        UPDATE problem_ticket
+        SET status = #{status},
+            status_changed_at = #{statusChangedAt},
+            updated_at = #{updatedAt}
+        WHERE id = #{id}
+          AND deleted = FALSE
+    </update>
+
+</mapper>

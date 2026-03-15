@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.betademands.mapper.ProblemTicketStatusFlowMapper">
+
+    <resultMap id="ProblemTicketStatusFlowResultMap" type="com.example.betademands.entity.ProblemTicketStatusFlow">
+        <id column="id" property="id"/>
+        <result column="ticket_id" property="ticketId"/>
+        <result column="from_status" property="fromStatus"/>
+        <result column="to_status" property="toStatus"/>
+        <result column="operate_time" property="operateTime"/>
+        <result column="operator_id" property="operatorId"/>
+        <result column="source" property="source"/>
+        <result column="remark" property="remark"/>
+        <result column="created_at" property="createdAt"/>
+    </resultMap>
+
+    <sql id="ProblemTicketStatusFlowBaseColumns">
+        id,
+        ticket_id,
+        from_status,
+        to_status,
+        operate_time,
+        operator_id,
+        source,
+        remark,
+        created_at
+    </sql>
+
+    <insert id="insert" parameterType="com.example.betademands.entity.ProblemTicketStatusFlow"
+            useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO problem_ticket_status_flow (
+            ticket_id,
+            from_status,
+            to_status,
+            operate_time,
+            operator_id,
+            source,
+            remark,
+            created_at
+        ) VALUES (
+            #{ticketId},
+            #{fromStatus},
+            #{toStatus},
+            #{operateTime},
+            #{operatorId},
+            #{source},
+            #{remark},
+            #{createdAt}
+        )
+    </insert>
+
+    <delete id="deleteByTicketIds">
+        DELETE FROM problem_ticket_status_flow
+        WHERE ticket_id IN
+        <foreach collection="ids" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </delete>
+
+    <select id="selectByTicketId" resultMap="ProblemTicketStatusFlowResultMap">
+        SELECT
+        <include refid="ProblemTicketStatusFlowBaseColumns"/>
+        FROM problem_ticket_status_flow
+        WHERE ticket_id = #{ticketId}
+        ORDER BY operate_time, id
+    </select>
+
+</mapper>
