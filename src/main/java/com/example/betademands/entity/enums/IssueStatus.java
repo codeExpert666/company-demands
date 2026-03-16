@@ -1,7 +1,5 @@
 package com.example.betademands.entity.enums;
 
-import java.util.Arrays;
-
 public enum IssueStatus {
     ANALYZING,
     FIXING,
@@ -10,10 +8,13 @@ public enum IssueStatus {
     SUSPENDED;
 
     public static IssueStatus from(String value) {
-        return Arrays.stream(values())
-            .filter(status -> status.name().equalsIgnoreCase(value))
-            .findFirst()
-            .orElseThrow(() -> new IllegalArgumentException("Unknown issue status: " + value));
+        for (IssueStatus status : values()) {
+            if (status.name().equalsIgnoreCase(value)) {
+                return status;
+            }
+        }
+
+        throw new IllegalArgumentException("Unknown issue status: " + value);
     }
 
     public boolean isTerminal() {

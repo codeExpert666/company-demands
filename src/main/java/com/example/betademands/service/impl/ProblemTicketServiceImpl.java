@@ -25,6 +25,7 @@ import org.springframework.util.CollectionUtils;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.EnumSet;
 import java.util.List;
@@ -89,9 +90,12 @@ public class ProblemTicketServiceImpl implements ProblemTicketService {
         if (CollectionUtils.isEmpty(requests)) {
             throw new BusinessException("import items cannot be empty");
         }
-        return requests.stream()
-            .map(request -> createTicket(request, operatorId, FlowSource.IMPORT))
-            .toList();
+        List<ProblemTicketResponse> responses = new ArrayList<>(requests.size());
+        for (CreateProblemTicketRequest request : requests) {
+            ProblemTicketResponse response = createTicket(request, operatorId, FlowSource.IMPORT);
+            responses.add(response);
+        }
+        return responses;
     }
 
     @Override
