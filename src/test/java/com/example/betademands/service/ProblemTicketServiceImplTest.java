@@ -158,7 +158,7 @@ class ProblemTicketServiceImplTest {
     }
 
     @Test
-    void changeStatus_shouldAccumulateRollbackDurationsButKeepFirstAnalysisExit() {
+    void changeStatus_shouldAccumulateRollbackDurationsIncludingReAnalyzing() {
         ProblemTicket ticket = ticket(3L, "BETA-3", IssueStatus.ANALYZING,
             LocalDateTime.of(2026, 3, 15, 9, 0),
             LocalDateTime.of(2026, 3, 15, 9, 0));
@@ -184,7 +184,7 @@ class ProblemTicketServiceImplTest {
         clock.set(LocalDateTime.of(2026, 3, 15, 18, 0));
         service.changeStatus(3L, new ChangeProblemTicketStatusRequest(IssueStatus.CLOSED, "done"), 1L);
 
-        assertEquals(3600L, metric.getAnalysisDurationSec());
+        assertEquals(7200L, metric.getAnalysisDurationSec());
         assertTrue(metric.isAnalysisCompleted());
         assertEquals(14400L, metric.getModifyDurationSec());
         assertTrue(metric.isModifyEligible());

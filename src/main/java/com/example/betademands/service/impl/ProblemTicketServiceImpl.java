@@ -207,8 +207,8 @@ public class ProblemTicketServiceImpl implements ProblemTicketService {
             throw new BusinessException("status change time is earlier than current stage start time");
         }
 
-        if (ticket.getStatus() == IssueStatus.ANALYZING && !metric.isAnalysisCompleted()) {
-            metric.setAnalysisDurationSec(ChronoUnit.SECONDS.between(metric.getSubmitTime(), operationTime));
+        if (ticket.getStatus() == IssueStatus.ANALYZING) {
+            metric.setAnalysisDurationSec(metric.getAnalysisDurationSec() + segmentSec);
             metric.setAnalysisCompleted(true);
         } else if (ticket.getStatus() == IssueStatus.FIXING) {
             metric.setModifyDurationSec(metric.getModifyDurationSec() + segmentSec);
