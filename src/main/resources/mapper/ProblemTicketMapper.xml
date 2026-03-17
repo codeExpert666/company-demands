@@ -89,15 +89,6 @@
         </foreach>
     </delete>
 
-    <select id="selectWithoutMetrics" resultMap="ProblemTicketResultMap">
-        SELECT
-        <include refid="ProblemTicketBaseColumns"/>
-        FROM problem_ticket
-        WHERE deleted = FALSE
-          AND id NOT IN (SELECT ticket_id FROM problem_ticket_metric)
-        ORDER BY id
-    </select>
-
     <select id="selectAllActive" resultMap="ProblemTicketResultMap">
         SELECT
         <include refid="ProblemTicketBaseColumns"/>

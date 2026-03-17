@@ -11,14 +11,13 @@ public class ProblemTicketMetric {
     private IssueStatus currentStatus;
     private LocalDateTime currentStageEnteredAt;
     private long analysisDurationSec;
-    private boolean analysisCompleted;
+    private boolean analysisTrackable;
     private long modifyDurationSec;
-    private boolean modifyEligible;
+    private boolean modifyTrackable;
     private long pushDurationSec;
-    private boolean pushEligible;
+    private boolean pushTrackable;
     private Long closedLoopDurationSec;
     private boolean closedLoopCompleted;
-    private boolean traceComplete;
     private LocalDateTime updatedAt;
 
     public Long getTicketId() {
@@ -61,12 +60,12 @@ public class ProblemTicketMetric {
         this.analysisDurationSec = analysisDurationSec;
     }
 
-    public boolean isAnalysisCompleted() {
-        return analysisCompleted;
+    public boolean isAnalysisTrackable() {
+        return analysisTrackable;
     }
 
-    public void setAnalysisCompleted(boolean analysisCompleted) {
-        this.analysisCompleted = analysisCompleted;
+    public void setAnalysisTrackable(boolean analysisTrackable) {
+        this.analysisTrackable = analysisTrackable;
     }
 
     public long getModifyDurationSec() {
@@ -77,12 +76,12 @@ public class ProblemTicketMetric {
         this.modifyDurationSec = modifyDurationSec;
     }
 
-    public boolean isModifyEligible() {
-        return modifyEligible;
+    public boolean isModifyTrackable() {
+        return modifyTrackable;
     }
 
-    public void setModifyEligible(boolean modifyEligible) {
-        this.modifyEligible = modifyEligible;
+    public void setModifyTrackable(boolean modifyTrackable) {
+        this.modifyTrackable = modifyTrackable;
     }
 
     public long getPushDurationSec() {
@@ -93,12 +92,12 @@ public class ProblemTicketMetric {
         this.pushDurationSec = pushDurationSec;
     }
 
-    public boolean isPushEligible() {
-        return pushEligible;
+    public boolean isPushTrackable() {
+        return pushTrackable;
     }
 
-    public void setPushEligible(boolean pushEligible) {
-        this.pushEligible = pushEligible;
+    public void setPushTrackable(boolean pushTrackable) {
+        this.pushTrackable = pushTrackable;
     }
 
     public Long getClosedLoopDurationSec() {
@@ -115,14 +114,6 @@ public class ProblemTicketMetric {
 
     public void setClosedLoopCompleted(boolean closedLoopCompleted) {
         this.closedLoopCompleted = closedLoopCompleted;
-    }
-
-    public boolean isTraceComplete() {
-        return traceComplete;
-    }
-
-    public void setTraceComplete(boolean traceComplete) {
-        this.traceComplete = traceComplete;
     }
 
     public LocalDateTime getUpdatedAt() {

@@ -4,6 +4,7 @@ import com.example.betademands.dto.ChangeProblemTicketStatusRequest;
 import com.example.betademands.dto.CreateProblemTicketRequest;
 import com.example.betademands.dto.ProblemTicketDashboardMetricsResponse;
 import com.example.betademands.dto.ProblemTicketResponse;
+import com.example.betademands.dto.StatusOptionResponse;
 import com.example.betademands.dto.UpdateProblemTicketRequest;
 import com.example.betademands.entity.enums.FlowSource;
 
@@ -23,5 +24,7 @@ public interface ProblemTicketService {
 
     ProblemTicketDashboardMetricsResponse getDashboardMetrics();
 
-    int backfillMissingMetrics();
+    List<StatusOptionResponse> getAllStatusOptions();
+
+    List<StatusOptionResponse> getNextStatusOptions(Long ticketId);
 }

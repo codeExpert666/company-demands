@@ -4,6 +4,7 @@ import com.example.betademands.entity.DashboardMetricsAggregate;
 import com.example.betademands.entity.ProblemTicketMetric;
 import org.apache.ibatis.annotations.Param;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 public interface ProblemTicketMetricMapper {
@@ -18,5 +19,5 @@ public interface ProblemTicketMetricMapper {
 
     int deleteByTicketIds(@Param("ids") List<Long> ids);
 
-    DashboardMetricsAggregate aggregateDashboardMetrics();
+    DashboardMetricsAggregate aggregateDashboardMetrics(@Param("now") LocalDateTime now);
 }

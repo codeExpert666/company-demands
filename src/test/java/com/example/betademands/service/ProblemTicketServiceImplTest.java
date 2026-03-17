@@ -4,6 +4,7 @@ import com.example.betademands.config.ProblemTicketMetricsProperties;
 import com.example.betademands.dto.ChangeProblemTicketStatusRequest;
 import com.example.betademands.dto.CreateProblemTicketRequest;
 import com.example.betademands.dto.ProblemTicketDashboardMetricsResponse;
+import com.example.betademands.dto.StatusOptionResponse;
 import com.example.betademands.dto.UpdateProblemTicketRequest;
 import com.example.betademands.entity.DashboardMetricsAggregate;
 import com.example.betademands.entity.ProblemTicket;
@@ -11,6 +12,7 @@ import com.example.betademands.entity.ProblemTicketMetric;
 import com.example.betademands.entity.ProblemTicketStatusFlow;
 import com.example.betademands.entity.enums.FlowSource;
 import com.example.betademands.entity.enums.IssueStatus;
+import com.example.betademands.exception.BusinessException;
 import com.example.betademands.mapper.ProblemTicketMapper;
 import com.example.betademands.mapper.ProblemTicketMetricMapper;
 import com.example.betademands.mapper.ProblemTicketStatusFlowMapper;
@@ -33,6 +35,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -64,7 +67,7 @@ class ProblemTicketServiceImplTest {
     }
 
     @Test
-    void createTicket_shouldInitializeAnalyzingStatusFlowAndMetric() {
+    void createTicket_shouldDefaultToAnalyzingAndInitializeTrackableMetric() {
         AtomicReference<ProblemTicket> storedTicket = new AtomicReference<>();
         when(flowMapper.insert(any())).thenReturn(1);
         when(metricMapper.insert(any())).thenReturn(1);
@@ -77,7 +80,7 @@ class ProblemTicketServiceImplTest {
         when(problemTicketMapper.selectActiveById(1L)).thenAnswer(invocation -> storedTicket.get());
 
         LocalDateTime submitTime = LocalDateTime.of(2026, 3, 15, 8, 30);
-        service.createTicket(new CreateProblemTicketRequest("BETA-1", "first issue", submitTime), 99L, FlowSource.CREATE);
+        service.createTicket(new CreateProblemTicketRequest("BETA-1", "first issue", submitTime, null), 99L, FlowSource.CREATE);
 
         ArgumentCaptor<ProblemTicketStatusFlow> flowCaptor = ArgumentCaptor.forClass(ProblemTicketStatusFlow.class);
         ArgumentCaptor<ProblemTicketMetric> metricCaptor = ArgumentCaptor.forClass(ProblemTicketMetric.class);
@@ -95,70 +98,42 @@ class ProblemTicketServiceImplTest {
         assertEquals(submitTime, metric.getSubmitTime());
         assertEquals(IssueStatus.ANALYZING, metric.getCurrentStatus());
         assertEquals(submitTime, metric.getCurrentStageEnteredAt());
-        assertTrue(metric.isTraceComplete());
-        assertFalse(metric.isAnalysisCompleted());
+        assertTrue(metric.isAnalysisTrackable());
+        assertFalse(metric.isModifyTrackable());
+        assertFalse(metric.isPushTrackable());
+        assertFalse(metric.isClosedLoopCompleted());
     }
 
     @Test
-    void changeStatus_shouldAccumulateNormalClosedLoopMetrics() {
-        ProblemTicket ticket = ticket(1L, "BETA-1", IssueStatus.ANALYZING,
-            LocalDateTime.of(2026, 3, 15, 9, 0),
-            LocalDateTime.of(2026, 3, 15, 9, 0));
-        ProblemTicketMetric metric = metric(1L,
-            LocalDateTime.of(2026, 3, 15, 9, 0),
-            IssueStatus.ANALYZING,
-            LocalDateTime.of(2026, 3, 15, 9, 0),
-            true);
-        stubMutableState(ticket, metric);
+    void createTicket_shouldAllowInitialFixingButKeepStageUntrackable() {
+        AtomicReference<ProblemTicket> storedTicket = new AtomicReference<>();
+        when(flowMapper.insert(any())).thenReturn(1);
+        when(metricMapper.insert(any())).thenReturn(1);
+        doAnswer(invocation -> {
+            ProblemTicket ticket = invocation.getArgument(0);
+            ticket.setId(2L);
+            storedTicket.set(ticket);
+            return 1;
+        }).when(problemTicketMapper).insert(any(ProblemTicket.class));
+        when(problemTicketMapper.selectActiveById(2L)).thenAnswer(invocation -> storedTicket.get());
 
-        clock.set(LocalDateTime.of(2026, 3, 15, 10, 0));
-        service.changeStatus(1L, new ChangeProblemTicketStatusRequest(IssueStatus.FIXING, "start fix"), 7L);
+        LocalDateTime submitTime = LocalDateTime.of(2026, 3, 15, 8, 0);
+        service.createTicket(new CreateProblemTicketRequest("BETA-2", "already fixing", submitTime, IssueStatus.FIXING), 101L, FlowSource.IMPORT);
 
-        clock.set(LocalDateTime.of(2026, 3, 15, 12, 0));
-        service.changeStatus(1L, new ChangeProblemTicketStatusRequest(IssueStatus.PUSHING, "push version"), 7L);
+        ArgumentCaptor<ProblemTicketMetric> metricCaptor = ArgumentCaptor.forClass(ProblemTicketMetric.class);
+        verify(metricMapper).insert(metricCaptor.capture());
 
-        clock.set(LocalDateTime.of(2026, 3, 15, 13, 0));
-        service.changeStatus(1L, new ChangeProblemTicketStatusRequest(IssueStatus.CLOSED, "done"), 7L);
-
-        assertEquals(IssueStatus.CLOSED, ticket.getStatus());
-        assertEquals(3600L, metric.getAnalysisDurationSec());
-        assertTrue(metric.isAnalysisCompleted());
-        assertEquals(7200L, metric.getModifyDurationSec());
-        assertTrue(metric.isModifyEligible());
-        assertEquals(3600L, metric.getPushDurationSec());
-        assertTrue(metric.isPushEligible());
-        assertEquals(14400L, metric.getClosedLoopDurationSec());
-        assertTrue(metric.isClosedLoopCompleted());
-        verify(flowMapper, times(3)).insert(any(ProblemTicketStatusFlow.class));
+        ProblemTicketMetric metric = metricCaptor.getValue();
+        assertEquals(IssueStatus.FIXING, metric.getCurrentStatus());
+        assertNull(metric.getCurrentStageEnteredAt());
+        assertFalse(metric.isAnalysisTrackable());
+        assertFalse(metric.isModifyTrackable());
+        assertFalse(metric.isPushTrackable());
+        assertFalse(metric.isClosedLoopCompleted());
     }
 
     @Test
-    void changeStatus_shouldHandleCloseWithoutFixing() {
-        ProblemTicket ticket = ticket(2L, "BETA-2", IssueStatus.ANALYZING,
-            LocalDateTime.of(2026, 3, 15, 9, 0),
-            LocalDateTime.of(2026, 3, 15, 9, 0));
-        ProblemTicketMetric metric = metric(2L,
-            LocalDateTime.of(2026, 3, 15, 9, 0),
-            IssueStatus.ANALYZING,
-            LocalDateTime.of(2026, 3, 15, 9, 0),
-            true);
-        stubMutableState(ticket, metric);
-
-        clock.set(LocalDateTime.of(2026, 3, 15, 11, 0));
-        service.changeStatus(2L, new ChangeProblemTicketStatusRequest(IssueStatus.CLOSED, "not a bug"), 11L);
-
-        assertEquals(7200L, metric.getAnalysisDurationSec());
-        assertTrue(metric.isAnalysisCompleted());
-        assertEquals(0L, metric.getModifyDurationSec());
-        assertFalse(metric.isModifyEligible());
-        assertEquals(0L, metric.getPushDurationSec());
-        assertFalse(metric.isPushEligible());
-        assertEquals(7200L, metric.getClosedLoopDurationSec());
-        assertTrue(metric.isClosedLoopCompleted());
-    }
-
-    @Test
-    void changeStatus_shouldAccumulateRollbackDurationsIncludingReAnalyzing() {
+    void changeStatus_shouldAccumulateClosedLoopMetricsUnderNewStateMachine() {
         ProblemTicket ticket = ticket(3L, "BETA-3", IssueStatus.ANALYZING,
             LocalDateTime.of(2026, 3, 15, 9, 0),
             LocalDateTime.of(2026, 3, 15, 9, 0));
@@ -166,40 +141,106 @@ class ProblemTicketServiceImplTest {
             LocalDateTime.of(2026, 3, 15, 9, 0),
             IssueStatus.ANALYZING,
             LocalDateTime.of(2026, 3, 15, 9, 0),
-            true);
+            true,
+            false,
+            false);
         stubMutableState(ticket, metric);
 
         clock.set(LocalDateTime.of(2026, 3, 15, 10, 0));
-        service.changeStatus(3L, new ChangeProblemTicketStatusRequest(IssueStatus.FIXING, "first fix"), 1L);
-        clock.set(LocalDateTime.of(2026, 3, 15, 11, 0));
-        service.changeStatus(3L, new ChangeProblemTicketStatusRequest(IssueStatus.ANALYZING, "re-analyze"), 1L);
-        clock.set(LocalDateTime.of(2026, 3, 15, 12, 0));
-        service.changeStatus(3L, new ChangeProblemTicketStatusRequest(IssueStatus.FIXING, "second fix"), 1L);
-        clock.set(LocalDateTime.of(2026, 3, 15, 13, 0));
-        service.changeStatus(3L, new ChangeProblemTicketStatusRequest(IssueStatus.PUSHING, "first push"), 1L);
-        clock.set(LocalDateTime.of(2026, 3, 15, 14, 0));
-        service.changeStatus(3L, new ChangeProblemTicketStatusRequest(IssueStatus.FIXING, "push failed"), 1L);
-        clock.set(LocalDateTime.of(2026, 3, 15, 16, 0));
-        service.changeStatus(3L, new ChangeProblemTicketStatusRequest(IssueStatus.PUSHING, "second push"), 1L);
-        clock.set(LocalDateTime.of(2026, 3, 15, 18, 0));
-        service.changeStatus(3L, new ChangeProblemTicketStatusRequest(IssueStatus.CLOSED, "done"), 1L);
+        service.changeStatus(3L, new ChangeProblemTicketStatusRequest(IssueStatus.FIXING, "start fix"), 7L);
 
-        assertEquals(7200L, metric.getAnalysisDurationSec());
-        assertTrue(metric.isAnalysisCompleted());
-        assertEquals(14400L, metric.getModifyDurationSec());
-        assertTrue(metric.isModifyEligible());
-        assertEquals(10800L, metric.getPushDurationSec());
-        assertTrue(metric.isPushEligible());
-        assertEquals(32400L, metric.getClosedLoopDurationSec());
+        assertEquals(IssueStatus.FIXING, ticket.getStatus());
+        assertEquals(3600L, metric.getAnalysisDurationSec());
+        assertTrue(metric.isModifyTrackable());
+        assertEquals(LocalDateTime.of(2026, 3, 15, 10, 0), metric.getCurrentStageEnteredAt());
+        assertFalse(metric.isClosedLoopCompleted());
+
+        clock.set(LocalDateTime.of(2026, 3, 15, 12, 0));
+        service.changeStatus(3L, new ChangeProblemTicketStatusRequest(IssueStatus.PUSHING, "push version"), 7L);
+
+        assertEquals(IssueStatus.PUSHING, ticket.getStatus());
+        assertEquals(7200L, metric.getModifyDurationSec());
+        assertTrue(metric.isPushTrackable());
+        assertEquals(LocalDateTime.of(2026, 3, 15, 12, 0), metric.getCurrentStageEnteredAt());
+        assertEquals(0L, metric.getPushDurationSec());
+
+        clock.set(LocalDateTime.of(2026, 3, 15, 13, 0));
+        service.changeStatus(3L, new ChangeProblemTicketStatusRequest(IssueStatus.CLOSED, "done"), 7L);
+
+        assertEquals(IssueStatus.CLOSED, ticket.getStatus());
+        assertEquals(3600L, metric.getAnalysisDurationSec());
+        assertEquals(7200L, metric.getModifyDurationSec());
+        assertEquals(3600L, metric.getPushDurationSec());
+        assertEquals(14400L, metric.getClosedLoopDurationSec());
+        assertTrue(metric.isClosedLoopCompleted());
+        assertNull(metric.getCurrentStageEnteredAt());
+        verify(flowMapper, times(3)).insert(any(ProblemTicketStatusFlow.class));
+    }
+
+    @Test
+    void changeStatus_shouldHandleSuspendResumeAndExcludeSuspendedAsClosedLoopEnd() {
+        ProblemTicket ticket = ticket(4L, "BETA-4", IssueStatus.ANALYZING,
+            LocalDateTime.of(2026, 3, 15, 9, 0),
+            LocalDateTime.of(2026, 3, 15, 9, 0));
+        ProblemTicketMetric metric = metric(4L,
+            LocalDateTime.of(2026, 3, 15, 9, 0),
+            IssueStatus.ANALYZING,
+            LocalDateTime.of(2026, 3, 15, 9, 0),
+            true,
+            false,
+            false);
+        stubMutableState(ticket, metric);
+
+        clock.set(LocalDateTime.of(2026, 3, 15, 10, 0));
+        service.changeStatus(4L, new ChangeProblemTicketStatusRequest(IssueStatus.SUSPENDED, "cannot solve now"), 3L);
+
+        assertEquals(IssueStatus.SUSPENDED, ticket.getStatus());
+        assertEquals(3600L, metric.getAnalysisDurationSec());
+        assertNull(metric.getCurrentStageEnteredAt());
+        assertFalse(metric.isClosedLoopCompleted());
+        assertNull(metric.getClosedLoopDurationSec());
+
+        clock.set(LocalDateTime.of(2026, 3, 15, 12, 0));
+        service.changeStatus(4L, new ChangeProblemTicketStatusRequest(IssueStatus.FIXING, "resume"), 3L);
+
+        assertEquals(IssueStatus.FIXING, ticket.getStatus());
+        assertTrue(metric.isModifyTrackable());
+        assertEquals(LocalDateTime.of(2026, 3, 15, 12, 0), metric.getCurrentStageEnteredAt());
+
+        clock.set(LocalDateTime.of(2026, 3, 15, 14, 0));
+        service.changeStatus(4L, new ChangeProblemTicketStatusRequest(IssueStatus.PUSHING, "push"), 3L);
+
+        clock.set(LocalDateTime.of(2026, 3, 15, 15, 0));
+        service.changeStatus(4L, new ChangeProblemTicketStatusRequest(IssueStatus.CLOSED, "close"), 3L);
+
+        assertEquals(7200L, metric.getModifyDurationSec());
+        assertEquals(3600L, metric.getPushDurationSec());
+        assertEquals(21600L, metric.getClosedLoopDurationSec());
         assertTrue(metric.isClosedLoopCompleted());
     }
 
     @Test
+    void changeStatus_shouldRejectIllegalTransition() {
+        ProblemTicket ticket = ticket(5L, "BETA-5", IssueStatus.FIXING,
+            LocalDateTime.of(2026, 3, 15, 9, 0),
+            LocalDateTime.of(2026, 3, 15, 10, 0));
+        when(problemTicketMapper.selectActiveByIdForUpdate(5L)).thenReturn(ticket);
+
+        BusinessException exception = assertThrows(BusinessException.class,
+            () -> service.changeStatus(5L, new ChangeProblemTicketStatusRequest(IssueStatus.ANALYZING, "rollback"), 1L));
+
+        assertEquals("invalid status transition: FIXING -> ANALYZING", exception.getMessage());
+        verify(metricMapper, never()).selectByTicketIdForUpdate(any());
+        verify(metricMapper, never()).update(any());
+        verify(flowMapper, never()).insert(any());
+    }
+
+    @Test
     void updateTicket_withoutStatusChange_shouldNotWriteFlowOrMetric() {
-        ProblemTicket ticket = ticket(4L, "BETA-4", IssueStatus.ANALYZING,
+        ProblemTicket ticket = ticket(6L, "BETA-6", IssueStatus.ANALYZING,
             LocalDateTime.of(2026, 3, 15, 9, 0),
             LocalDateTime.of(2026, 3, 15, 9, 0));
-        when(problemTicketMapper.selectActiveById(4L)).thenReturn(ticket);
+        when(problemTicketMapper.selectActiveById(6L)).thenReturn(ticket);
         doAnswer(invocation -> {
             ProblemTicket update = invocation.getArgument(0);
             if (update.getDescription() != null) {
@@ -209,7 +250,7 @@ class ProblemTicketServiceImplTest {
             return 1;
         }).when(problemTicketMapper).updateSelective(any(ProblemTicket.class));
 
-        service.updateTicket(4L, new UpdateProblemTicketRequest(null, "new description", null, null), 8L);
+        service.updateTicket(6L, new UpdateProblemTicketRequest(null, "new description", null, null), 8L);
 
         assertEquals("new description", ticket.getDescription());
         verify(problemTicketMapper).updateSelective(any(ProblemTicket.class));
@@ -219,38 +260,31 @@ class ProblemTicketServiceImplTest {
 
     @Test
     void deleteTickets_shouldCascadeDeleteAuxiliaryTables() {
-        when(problemTicketMapper.countActiveByIds(List.of(5L, 6L))).thenReturn(2L);
+        when(problemTicketMapper.countActiveByIds(List.of(7L, 8L))).thenReturn(2L);
 
-        service.deleteTickets(List.of(5L, 6L));
+        service.deleteTickets(List.of(7L, 8L));
 
-        verify(flowMapper).deleteByTicketIds(List.of(5L, 6L));
-        verify(metricMapper).deleteByTicketIds(List.of(5L, 6L));
-        verify(problemTicketMapper).deleteByIds(List.of(5L, 6L));
+        verify(flowMapper).deleteByTicketIds(List.of(7L, 8L));
+        verify(metricMapper).deleteByTicketIds(List.of(7L, 8L));
+        verify(problemTicketMapper).deleteByIds(List.of(7L, 8L));
     }
 
     @Test
-    void backfillMissingMetrics_shouldOnlyMarkAnalyzingTicketAsTraceComplete() {
-        ProblemTicket analyzingTicket = ticket(7L, "BETA-7", IssueStatus.ANALYZING,
-            LocalDateTime.of(2026, 3, 10, 9, 0),
-            LocalDateTime.of(2026, 3, 10, 9, 0));
-        ProblemTicket closedTicket = ticket(8L, "BETA-8", IssueStatus.CLOSED,
-            LocalDateTime.of(2026, 3, 9, 9, 0),
-            LocalDateTime.of(2026, 3, 9, 18, 0));
-        when(problemTicketMapper.selectWithoutMetrics()).thenReturn(List.of(analyzingTicket, closedTicket));
-        when(metricMapper.insert(any())).thenReturn(1);
-        when(flowMapper.insert(any())).thenReturn(1);
+    void getStatusOptions_shouldReturnAllStatusesAndReachableNextStatuses() {
+        ProblemTicket ticket = ticket(9L, "BETA-9", IssueStatus.ANALYZING,
+            LocalDateTime.of(2026, 3, 15, 9, 0),
+            LocalDateTime.of(2026, 3, 15, 9, 0));
+        when(problemTicketMapper.selectActiveById(9L)).thenReturn(ticket);
 
-        int count = service.backfillMissingMetrics();
+        List<StatusOptionResponse> allOptions = service.getAllStatusOptions();
+        List<StatusOptionResponse> nextOptions = service.getNextStatusOptions(9L);
 
-        assertEquals(2, count);
-        ArgumentCaptor<ProblemTicketMetric> metricCaptor = ArgumentCaptor.forClass(ProblemTicketMetric.class);
-        verify(metricMapper, times(2)).insert(metricCaptor.capture());
-        List<ProblemTicketMetric> metrics = metricCaptor.getAllValues();
-        assertTrue(metrics.get(0).isTraceComplete());
-        assertEquals(analyzingTicket.getSubmitTime(), metrics.get(0).getCurrentStageEnteredAt());
-        assertFalse(metrics.get(1).isTraceComplete());
-        assertEquals(closedTicket.getStatusChangedAt(), metrics.get(1).getCurrentStageEnteredAt());
-        verify(flowMapper, times(1)).insert(any(ProblemTicketStatusFlow.class));
+        assertEquals(List.of("ANALYZING", "FIXING", "PUSHING", "CLOSED", "SUSPENDED"),
+            allOptions.stream().map(StatusOptionResponse::code).toList());
+        assertEquals(List.of("分析中", "修改中", "版本推送中", "问题关闭", "挂起"),
+            allOptions.stream().map(StatusOptionResponse::label).toList());
+        assertEquals(List.of("FIXING", "CLOSED", "SUSPENDED"),
+            nextOptions.stream().map(StatusOptionResponse::code).toList());
     }
 
     @Test
@@ -264,14 +298,16 @@ class ProblemTicketServiceImplTest {
         aggregate.setPushSampleCount(1L);
         aggregate.setClosedLoopAvgDurationSec(7200L);
         aggregate.setClosedLoopSampleCount(3L);
-        when(metricMapper.aggregateDashboardMetrics()).thenReturn(aggregate);
+        when(metricMapper.aggregateDashboardMetrics(any(LocalDateTime.class))).thenReturn(aggregate);
 
         ProblemTicketDashboardMetricsResponse response = service.getDashboardMetrics();
 
         assertEquals(3600L, response.analysis().avgDurationSec());
         assertEquals(2L, response.analysis().sampleCount());
         assertEquals(5400L, response.modify().avgDurationSec());
+        assertEquals(1800L, response.push().avgDurationSec());
         assertEquals(7200L, response.closedLoop().avgDurationSec());
+        assertEquals(3L, response.closedLoop().sampleCount());
         assertEquals(LocalDateTime.of(2026, 3, 15, 0, 0), response.accurateFrom());
     }
 
@@ -299,14 +335,13 @@ class ProblemTicketServiceImplTest {
         target.setCurrentStatus(source.getCurrentStatus());
         target.setCurrentStageEnteredAt(source.getCurrentStageEnteredAt());
         target.setAnalysisDurationSec(source.getAnalysisDurationSec());
-        target.setAnalysisCompleted(source.isAnalysisCompleted());
+        target.setAnalysisTrackable(source.isAnalysisTrackable());
         target.setModifyDurationSec(source.getModifyDurationSec());
-        target.setModifyEligible(source.isModifyEligible());
+        target.setModifyTrackable(source.isModifyTrackable());
         target.setPushDurationSec(source.getPushDurationSec());
-        target.setPushEligible(source.isPushEligible());
+        target.setPushTrackable(source.isPushTrackable());
         target.setClosedLoopDurationSec(source.getClosedLoopDurationSec());
         target.setClosedLoopCompleted(source.isClosedLoopCompleted());
-        target.setTraceComplete(source.isTraceComplete());
         target.setUpdatedAt(source.getUpdatedAt());
     }
 
@@ -328,22 +363,23 @@ class ProblemTicketServiceImplTest {
                                        LocalDateTime submitTime,
                                        IssueStatus currentStatus,
                                        LocalDateTime currentStageEnteredAt,
-                                       boolean traceComplete) {
+                                       boolean analysisTrackable,
+                                       boolean modifyTrackable,
+                                       boolean pushTrackable) {
         ProblemTicketMetric metric = new ProblemTicketMetric();
         metric.setTicketId(ticketId);
         metric.setSubmitTime(submitTime);
         metric.setCurrentStatus(currentStatus);
         metric.setCurrentStageEnteredAt(currentStageEnteredAt);
         metric.setAnalysisDurationSec(0L);
-        metric.setAnalysisCompleted(false);
+        metric.setAnalysisTrackable(analysisTrackable);
         metric.setModifyDurationSec(0L);
-        metric.setModifyEligible(false);
+        metric.setModifyTrackable(modifyTrackable);
         metric.setPushDurationSec(0L);
-        metric.setPushEligible(false);
+        metric.setPushTrackable(pushTrackable);
         metric.setClosedLoopDurationSec(null);
         metric.setClosedLoopCompleted(false);
-        metric.setTraceComplete(traceComplete);
-        metric.setUpdatedAt(currentStageEnteredAt);
+        metric.setUpdatedAt(currentStageEnteredAt == null ? submitTime : currentStageEnteredAt);
         return metric;
     }
 

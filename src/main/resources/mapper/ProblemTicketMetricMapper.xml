@@ -10,14 +10,13 @@
         <result column="current_status" property="currentStatus"/>
         <result column="current_stage_entered_at" property="currentStageEnteredAt"/>
         <result column="analysis_duration_sec" property="analysisDurationSec"/>
-        <result column="analysis_completed" property="analysisCompleted"/>
+        <result column="analysis_trackable" property="analysisTrackable"/>
         <result column="modify_duration_sec" property="modifyDurationSec"/>
-        <result column="modify_eligible" property="modifyEligible"/>
+        <result column="modify_trackable" property="modifyTrackable"/>
         <result column="push_duration_sec" property="pushDurationSec"/>
-        <result column="push_eligible" property="pushEligible"/>
+        <result column="push_trackable" property="pushTrackable"/>
         <result column="closed_loop_duration_sec" property="closedLoopDurationSec"/>
         <result column="closed_loop_completed" property="closedLoopCompleted"/>
-        <result column="trace_complete" property="traceComplete"/>
         <result column="updated_at" property="updatedAt"/>
     </resultMap>
 
@@ -38,14 +37,13 @@
         current_status,
         current_stage_entered_at,
         analysis_duration_sec,
-        analysis_completed,
+        analysis_trackable,
         modify_duration_sec,
-        modify_eligible,
+        modify_trackable,
         push_duration_sec,
-        push_eligible,
+        push_trackable,
         closed_loop_duration_sec,
         closed_loop_completed,
-        trace_complete,
         updated_at
     </sql>
 
@@ -56,14 +54,13 @@
             current_status,
             current_stage_entered_at,
             analysis_duration_sec,
-            analysis_completed,
+            analysis_trackable,
             modify_duration_sec,
-            modify_eligible,
+            modify_trackable,
             push_duration_sec,
-            push_eligible,
+            push_trackable,
             closed_loop_duration_sec,
             closed_loop_completed,
-            trace_complete,
             updated_at
         ) VALUES (
             #{ticketId},
@@ -71,14 +68,13 @@
             #{currentStatus},
             #{currentStageEnteredAt},
             #{analysisDurationSec},
-            #{analysisCompleted},
+            #{analysisTrackable},
             #{modifyDurationSec},
-            #{modifyEligible},
+            #{modifyTrackable},
             #{pushDurationSec},
-            #{pushEligible},
+            #{pushTrackable},
             #{closedLoopDurationSec},
             #{closedLoopCompleted},
-            #{traceComplete},
             #{updatedAt}
         )
     </insert>
@@ -103,14 +99,13 @@
         SET current_status = #{currentStatus},
             current_stage_entered_at = #{currentStageEnteredAt},
             analysis_duration_sec = #{analysisDurationSec},
-            analysis_completed = #{analysisCompleted},
+            analysis_trackable = #{analysisTrackable},
             modify_duration_sec = #{modifyDurationSec},
-            modify_eligible = #{modifyEligible},
+            modify_trackable = #{modifyTrackable},
             push_duration_sec = #{pushDurationSec},
-            push_eligible = #{pushEligible},
+            push_trackable = #{pushTrackable},
             closed_loop_duration_sec = #{closedLoopDurationSec},
             closed_loop_completed = #{closedLoopCompleted},
-            trace_complete = #{traceComplete},
             updated_at = #{updatedAt}
         WHERE ticket_id = #{ticketId}
     </update>
@@ -126,28 +121,43 @@
     <select id="aggregateDashboardMetrics" resultMap="DashboardMetricsAggregateResultMap">
         SELECT
             COALESCE(CAST(ROUND(AVG(CASE
-                WHEN m.analysis_completed = TRUE AND m.trace_complete = TRUE THEN m.analysis_duration_sec
+                WHEN m.analysis_trackable = TRUE THEN m.analysis_duration_sec +
+                    CASE
+                        WHEN m.current_status = 'ANALYZING' AND m.current_stage_entered_at IS NOT NULL
+                            THEN TIMESTAMPDIFF(SECOND, m.current_stage_entered_at, #{now})
+                        ELSE 0
+                    END
             END), 0) AS BIGINT), 0) AS analysis_avg_duration_sec,
             COALESCE(SUM(CASE
-                WHEN m.analysis_completed = TRUE AND m.trace_complete = TRUE THEN 1 ELSE 0
+                WHEN m.analysis_trackable = TRUE THEN 1 ELSE 0
             END), 0) AS analysis_sample_count,
             COALESCE(CAST(ROUND(AVG(CASE
-                WHEN m.modify_eligible = TRUE AND m.trace_complete = TRUE THEN m.modify_duration_sec
+                WHEN m.modify_trackable = TRUE THEN m.modify_duration_sec +
+                    CASE
+                        WHEN m.current_status = 'FIXING' AND m.current_stage_entered_at IS NOT NULL
+                            THEN TIMESTAMPDIFF(SECOND, m.current_stage_entered_at, #{now})
+                        ELSE 0
+                    END
             END), 0) AS BIGINT), 0) AS modify_avg_duration_sec,
             COALESCE(SUM(CASE
-                WHEN m.modify_eligible = TRUE AND m.trace_complete = TRUE THEN 1 ELSE 0
+                WHEN m.modify_trackable = TRUE THEN 1 ELSE 0
             END), 0) AS modify_sample_count,
             COALESCE(CAST(ROUND(AVG(CASE
-                WHEN m.push_eligible = TRUE AND m.trace_complete = TRUE THEN m.push_duration_sec
+                WHEN m.push_trackable = TRUE THEN m.push_duration_sec +
+                    CASE
+                        WHEN m.current_status = 'PUSHING' AND m.current_stage_entered_at IS NOT NULL
+                            THEN TIMESTAMPDIFF(SECOND, m.current_stage_entered_at, #{now})
+                        ELSE 0
+                    END
             END), 0) AS BIGINT), 0) AS push_avg_duration_sec,
             COALESCE(SUM(CASE
-                WHEN m.push_eligible = TRUE AND m.trace_complete = TRUE THEN 1 ELSE 0
+                WHEN m.push_trackable = TRUE THEN 1 ELSE 0
             END), 0) AS push_sample_count,
             COALESCE(CAST(ROUND(AVG(CASE
-                WHEN m.closed_loop_completed = TRUE AND m.trace_complete = TRUE THEN m.closed_loop_duration_sec
+                WHEN m.closed_loop_completed = TRUE THEN m.closed_loop_duration_sec
             END), 0) AS BIGINT), 0) AS closed_loop_avg_duration_sec,
             COALESCE(SUM(CASE
-                WHEN m.closed_loop_completed = TRUE AND m.trace_complete = TRUE THEN 1 ELSE 0
+                WHEN m.closed_loop_completed = TRUE THEN 1 ELSE 0
             END), 0) AS closed_loop_sample_count
         FROM problem_ticket_metric m
         INNER JOIN problem_ticket t ON t.id = m.ticket_id

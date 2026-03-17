@@ -6,6 +6,7 @@ import com.example.betademands.dto.DeleteProblemTicketsRequest;
 import com.example.betademands.dto.ImportProblemTicketsRequest;
 import com.example.betademands.dto.ProblemTicketDashboardMetricsResponse;
 import com.example.betademands.dto.ProblemTicketResponse;
+import com.example.betademands.dto.StatusOptionResponse;
 import com.example.betademands.dto.UpdateProblemTicketRequest;
 import com.example.betademands.entity.enums.FlowSource;
 import com.example.betademands.service.ProblemTicketService;
@@ -68,5 +69,15 @@ public class ProblemTicketController {
     @GetMapping("/dashboard/metrics")
     public ProblemTicketDashboardMetricsResponse getDashboardMetrics() {
         return problemTicketService.getDashboardMetrics();
+    }
+
+    @GetMapping("/status-options")
+    public List<StatusOptionResponse> getStatusOptions() {
+        return problemTicketService.getAllStatusOptions();
+    }
+
+    @GetMapping("/{ticketId}/next-status-options")
+    public List<StatusOptionResponse> getNextStatusOptions(@PathVariable Long ticketId) {
+        return problemTicketService.getNextStatusOptions(ticketId);
     }
 }

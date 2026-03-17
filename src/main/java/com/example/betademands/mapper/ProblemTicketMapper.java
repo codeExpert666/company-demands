@@ -18,8 +18,6 @@ public interface ProblemTicketMapper {
 
     int deleteByIds(@Param("ids") List<Long> ids);
 
-    List<ProblemTicket> selectWithoutMetrics();
-
     List<ProblemTicket> selectAllActive();
 
     long countActiveByIds(@Param("ids") List<Long> ids);
